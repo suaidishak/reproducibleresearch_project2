@@ -1,0 +1,112 @@
+#Reproducible Research: Peer Assessment 2
+## Suaid Ishak
+```{r echo=FALSE}
+my_date <- date()
+```
+`r my_date`
+#Most Hazardous Weather Events: Fatalities, Injuries, and Damage Costs (1950~2011)
+#Synopsis:
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration’s (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. The events in the database start in the year 1950 and end in November 2011.
+
+In the given data, the total number of records is 902297 and the total number of events is 985. For this project, I tried to extract top 25 most harmful events from the prospective of fatalities, injuries and property/crop damage costs, respectvely.
+
+##Data Processing
+
+###Source data file
+
+<!-- Download the source data file unless it has not been done yet: -->
+<!-- ```{r} -->
+<!-- if (!file.exists("StormData.csv.bz2")) { -->
+<!--     # Make a sub-folder "data", unless it exists -->
+<!--     if (!dir.exists("./data")) { -->
+<!--         dir.create("./data") -->
+<!--     } -->
+<!--     url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2" -->
+<!--     download.file(url, destfile="./data/StormData.csv.bz2") -->
+<!-- } -->
+<!-- ``` -->
+
+
+###Loading and preprocessing the data
+
+<!-- &ensp; a. Load the data (i.e. read.csv())   -->
+<!-- &ensp; b. Extract core columns for this project -->
+
+```{r}
+data <- read.csv("./data/repdata-data-StormData.csv", stringsAsFactors = FALSE, strip.white=TRUE, header=TRUE)
+data <- data[ , c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")]
+str(data)
+```
+
+###Aggregating top 25 most harmful events with respect to population health and economic consequences
+
+health impact
+```{r}
+library(ggplot2)
+peopleDamage <- aggregate(cbind(FATALITIES, INJURIES) ~ EVTYPE, data, sum, na.rm = TRUE)
+peopleDamage$TOTAL <- with(peopleDamage, FATALITIES + INJURIES)
+```
+economic impact
+
+Note that the units of PROPDMG (property damage) and CROPDMG (crop damage) fields are not the same. The units are expressed in the PROPDMGEXT and CROPDMGEXP fields. It is necessary to convert the units such as M (million) to digits and to multiply them to DMG values. So, I created two new fields, PRODMG2 and CROPDMG2. I created another field TOTALDMG, by adding PRODMG2 and CROPDMG2.
+```{r}
+library(plyr)
+
+# unique(data$PROPDMGEXP)
+# [1] "K" "M" ""  "B" "m" "+" "0" "5" "6" "?" "4" "2" "3" "h" "7" "H" "-" "1" "8"
+
+tempPropExp <- mapvalues(data$PROPDMGEXP,    
+            c("K","M","","B","m","+","0","5","6","?","4","2","3","h","7","H","-","1","8"), 
+            c(1e3,1e6, 1,1e9,1e6,  1,  1,1e5,1e6,  1,1e4,1e2,1e3,  1,1e7,1e2,  1, 10,1e8))
+data$PROPDMG2 <- data$PROPDMG * as.numeric(tempPropExp)
+
+# unique(data$CROPDMGEXP)
+# [1] ""  "M" "K" "m" "B" "?" "0" "k" "2"
+
+tempCropExp <- mapvalues(data$CROPDMGEXP, 
+            c("","M","K","m","B","?","0","k","2"), 
+            c( 1,1e6,1e3,1e6,1e9, 1,  1, 1e3,1e2))
+data$CROPDMG2 <- data$CROPDMG * as.numeric(tempCropExp)
+
+data$TOTALDMG <- data$PROPDMG2 + data$CROPDMG2
+
+totalDamage <- aggregate(TOTALDMG ~ EVTYPE, data, sum, na.rm = TRUE)
+```
+###Results
+Take top 25 most harmful events with respect to Fatalities, Fatalities + Injuries, and (property and crop) Damage Costs, and fiqure them in plots.
+```{r}
+peopleDeathTop25 <- head(peopleDamage[order(-peopleDamage$FATALITIES),], 25)
+peopleDeathTop25
+```
+```{r}
+g <- ggplot(peopleDeathTop25, aes(EVTYPE, FATALITIES))
+g + geom_bar(stat = "identity") + 
+    coord_flip() +
+    labs(x = "Event Type", y = "Number of Fatalities", title = "Top 25 Hazardous Weather Events: Fatalities")
+```
+
+```{r}
+peopleDamageTop25 <- head(peopleDamage[order(-peopleDamage$TOTAL),], 25)
+peopleDamageTop25
+```
+```{r}
+
+g <- ggplot(peopleDamageTop25, aes(EVTYPE, FATALITIES+INJURIES))
+g + geom_bar(stat = "identity") + coord_flip() + labs(x = "Event Type", 
+                                                      y = "Total Number of Fatalities and Injuries",title = "Top 25 Hazardous Weather Events: Fatalities and Injuries")
+```
+
+```{r}
+head(data[order(-data$TOTALDMG),], 25)
+```
+```{r}
+totalDamageTop25 <- head(totalDamage[order(-totalDamage$TOTALDMG),], 25)
+totalDamageTop25$TOTALDMG <- totalDamageTop25$TOTALDMG/1e+09
+g <- ggplot(totalDamageTop25, aes(EVTYPE, TOTALDMG))
+g + geom_bar(stat = "identity") + coord_flip() + labs(x = "Event Type", 
+                                                      y = "Property/Crop Damage Costs (billion $)", 
+                                                      title = "Top 25 Hazardous Weather Events: Economic Damage")
+```
+
+
